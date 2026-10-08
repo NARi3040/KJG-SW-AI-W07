@@ -110,7 +110,12 @@ static void pic_end_of_interrupt (int irq);
 /* Interrupt handlers. */
 void intr_handler (struct intr_frame *args);
 
-/* Returns the current interrupt status. */
+/**
+ * @brief 현재 인터럽트 상태를 반환함
+ * 
+ *
+ * @note 아직 뭔지 모르곘음
+ */
 enum intr_level
 intr_get_level (void) {
 	uint64_t flags;

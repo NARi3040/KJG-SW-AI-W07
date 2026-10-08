@@ -15,6 +15,10 @@ on:
         options: [threads, userprog, vm, filesys]
         default: threads
 
+permissions:
+  contents: read
+  issues: write
+
 concurrency:
   group: pintos-check
   cancel-in-progress: false
@@ -35,3 +39,18 @@ jobs:
         run: |
           source ../activate
           make check
+
+      # only after merge (push), so unmerged PR code never closes an issue
+      - name: Close issues of passed tests
+        if: always() && github.event_name == 'push'
+        working-directory: pintos/threads/build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue list --state open --limit 200 --json number,title > /tmp/issues.json
+          for f in tests/threads/*.result; do
+            [ "$(head -n1 "$f")" = PASS ] || continue
+            t=$(basename "$f" .result)
+            jq -r --arg t "$t" '.[] | select((.title | sub("\\s+$"; "")) | endswith("테스트 - " + $t)) | .number' /tmp/issues.json |
+              xargs -r -n1 gh issue close --comment "pintos-check: $t PASS ($GITHUB_SHA)"
+          done

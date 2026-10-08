@@ -1,0 +1,34 @@
+name: pintos-check
+
+on:
+  push:
+    branches: [main]
+    paths: ['pintos/**']
+  workflow_dispatch:
+    inputs:
+      project:
+        description: Pintos project to test
+        type: choice
+        options: [threads, userprog, vm, filesys]
+        default: threads
+
+concurrency:
+  group: pintos-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    # same Ubuntu release as the devcontainer
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install qemu
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
+
+      - name: make check
+        working-directory: pintos/${{ inputs.project || 'threads' }}
+        run: |
+          source ../activate
+          make check

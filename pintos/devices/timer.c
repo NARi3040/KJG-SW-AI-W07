@@ -90,7 +90,7 @@ timer_calibrate (void) {
  * @brief 운영체제가 부팅된 이후 타이머가 흐른 틱 수를 반환함
  * 
  * 
- * @return t = ticks 인데 모름
+ * @return 운영체제가 부팅된 이후 타이머가 흐른 틱 수를 반환함
  * @note 아직 뭔지 모르곘음
  */
 int64_t
@@ -105,10 +105,9 @@ timer_ticks (void) {
 /**
  * @brief timer_ticks()가 이전에 반환했던 값인 과거 특정 시점(then) 이후로 경과한 타이머 틱의 수를 반환함
  * 
- * @param[in] then 
+ * @param[in] then 함수를 호출한 특정 시점의 틱 수 
  * 
  * @return 과거 특정 시점(then)부터 현재까지 경과한 타이머 틱(Timer Tick)의 개수를 반환함
- * @note 아직 뭔지 모르곘음
  */
 int64_t
 timer_elapsed (int64_t then) {
@@ -180,6 +179,7 @@ timer_nsleep (int64_t ns) {
  * 
  * @note 아직 뭔지 모르곘음
  */
+
 void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
@@ -221,12 +221,13 @@ too_many_loops (unsigned loops) {
 }
 
 /**
- * @brief 짧은 지연을 구현하기 위해 단순한 루프를 LOOPS번 반복함.
+ * @brief CPU를 계속 쓰면서 반복문으로 상태를 확인하며 기다리는 방식
  * 
+ * 짧은 지연을 구현하기 위해 단순한 루프를 LOOPS번 반복함.
  * 코드 정렬(alignment)이 타이밍에 크게 영향을 줄 수 있으므로 NO_INLINE으로 표시함. 
  * 이 함수가 위치마다 다르게 인라인되면 결과를 예측하기 어려워짐.
  *
- * @note 아직 뭔지 모르곘음
+ * @note 
  */
 static void NO_INLINE
 busy_wait (int64_t loops) {
@@ -234,16 +235,18 @@ busy_wait (int64_t loops) {
 		barrier ();
 }
 
-/* 대략 NUM/DENOM초 동안 sleep함. */
 /**
  * @brief 대략 NUM/DENOM초 동안 sleep함.
- * 
- * 
+ *
+ * NUM/DENOM초를 타이머 틱으로 변환(내림)한 뒤, 1 tick 이상이면
+ * timer_sleep()으로, 1 tick 미만이면 busy_wait()로 기다림.
  *
  * @param[in] num 분수의 분자. 기다릴 시간의 수치임. (int64_t라서 곱셈 오버플로를 피함)
  * @param[in] denom 분수의  분모. num의 단위를 정함. 1초를 몇 등분한 단위인지를 뜻함.
- * @note 아직 뭔지 모르곘음
- * 
+ * @pre 인터럽트가 켜져 있어야 함 (intr_get_level() == INTR_ON).
+ * @pre 1 tick 미만 대기(busy_wait 분기)에서는 denom이 1000의 배수여야 함.
+ * @note 1 tick 미만 구간은 sleep/wakeup 방식이 적용되지 않고 항상 busy-wait임.
+ *
  * @see timer_msleep(ms), timer_usleep(us), timer_nsleep(ns)
  */
 static void

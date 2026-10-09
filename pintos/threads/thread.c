@@ -1,3 +1,11 @@
+/**
+ * @file thread.c
+ * @brief 스레드
+ * @author jye
+ * @date 2026-10-09
+ * @version 1.0
+ */
+
 #include "threads/thread.h"
 #include <debug.h>
 #include <stddef.h>
@@ -216,8 +224,21 @@ thread_create (const char *name, int priority,
    This function must be called with interrupts turned off.  It
    is usually a better idea to use one of the synchronization
    primitives in synch.h. */
-void
-thread_block (void) {
+
+/**
+ * @brief 현재 스레드를 BLOCKED 상태로 전환하고 스케줄링한다
+ * 
+ * @details
+ * 현재 스레드의 상태를 THREAD_BLOCKED로 변경한 뒤 schedule()를 호출
+ * 이 스레드는 다른 코드가 thread_unblock()으로 깨워서 실행 가능하게 만들고
+ * 스케줄러가 다시 선택한 후에 호출 지점으로 복귀
+ * 
+ * @note 외부 인터럽트 처리 문맥에서는 호출할 수 없다
+ * @note 호출 시 인터럽트가 비활성화되어 있어야 한다
+ * @see thread_unblock()
+ * @see schedule()
+ */
+void thread_block (void) {
 	ASSERT (!intr_context ());
 	ASSERT (intr_get_level () == INTR_OFF);
 	thread_current ()->status = THREAD_BLOCKED;

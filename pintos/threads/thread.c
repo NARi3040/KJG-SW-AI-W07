@@ -218,12 +218,12 @@ thread_create (const char *name, int priority,
 	return tid;
 }
 
-/* Puts the current thread to sleep.  It will not be scheduled
-   again until awoken by thread_unblock().
+/* 현재 스레드를 대기 상태로 전환한다.
+   thread_unblock()으로 깨어나기 전까지
+   이 스레드는 다시 실행 대상으로 선택되지 않는다.
 
-   This function must be called with interrupts turned off.  It
-   is usually a better idea to use one of the synchronization
-   primitives in synch.h. */
+   인터럽트를 끈 상태에서 호출해야 한다.
+   일반적으로는 synch.h의 동기화 도구를 사용하는 편이 더 적절하다. */
 
 /**
  * @brief 현재 스레드를 BLOCKED 상태로 전환하고 스케줄링한다
@@ -235,6 +235,8 @@ thread_create (const char *name, int priority,
  * 
  * @note 외부 인터럽트 처리 문맥에서는 호출할 수 없다
  * @note 호출 시 인터럽트가 비활성화되어 있어야 한다
+ * @note 이 함수 자체는 깨울 시각을 기록하거나 시간을 확인하지 않음
+ * 
  * @see thread_unblock()
  * @see schedule()
  */
@@ -245,14 +247,25 @@ void thread_block (void) {
 	schedule ();
 }
 
-/* Transitions a blocked thread T to the ready-to-run state.
-   This is an error if T is not blocked.  (Use thread_yield() to
-   make the running thread ready.)
+/* 대기 중인 스레드 T를 실행 가능한 상태로 전환한다.
+   T가 BLOCKED 상태가 아니라면 잘못된 호출이다.
+   실행 중인 스레드를 READY 상태로 바꾸려면 thread_yield()를 사용한다.
 
-   This function does not preempt the running thread.  This can
-   be important: if the caller had disabled interrupts itself,
-   it may expect that it can atomically unblock a thread and
-   update other data. */
+   이 함수 자체는 현재 실행 중인 스레드의 CPU를 빼앗지 않는다.
+   호출자가 이미 인터럽트를 꺼둔 경우, 스레드를 깨우고 다른 데이터를
+   변경하는 작업을 중간에 방해받지 않는 하나의 구간으로 처리하려 할 수 있다.
+   따라서 이 함수가 즉시 실행을 교대하지 않는다는 점이 중요하다. */
+/**
+ * @brief 대기중인(BLOCKED) 스레드를 실행 가능 상태로 전환
+ * @details 
+ * 대상 스레드의 elem을 ready_list에 연결하고 status를 THREAD_READY로 변경한다
+ * 구조체 전체를 복사하는게 아니라 목록 연결 요소를 연결
+ * 
+ * @param[in, out] t 깨울 BLOCKED 스레드를 가리키는 포인터
+ * 
+ * @note 상태 변경과 실행 후보 목록 등록이 모두 필요
+ * @note 이 함수 자체는 대상 스레드를 즉시 실행하지 않음
+ */
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
@@ -313,8 +326,17 @@ thread_exit (void) {
 	NOT_REACHED ();
 }
 
-/* Yields the CPU.  The current thread is not put to sleep and
-   may be scheduled again immediately at the scheduler's whim. */
+/* CPU를 양보한다. 현재 스레드는 대기 상태로 들어가지 않는다.
+   스케줄러의 선택에 따라 이 스레드가 즉시 다시 실행될 수도 있다. */
+
+/**
+ * @brief 현재 스레드 CPU 양보
+ * 
+ * @details 일반 스레드는 ready_list에 들어가 다시 실행 대상 선택될 수 있음 (스케줄러에게)
+ * 
+ * @note BLOCKED 되는게 아님
+ * @note CPU 양보하고 ready_list 들가기 때문에 즉시 다시 선택될 수도 있음
+ */
 void
 thread_yield (void) {
 	struct thread *curr = thread_current ();

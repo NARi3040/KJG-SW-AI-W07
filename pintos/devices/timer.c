@@ -70,7 +70,16 @@ timer_calibrate (void) {
 	printf ("%'"PRIu64" loops/s.\n", (uint64_t) loops_per_tick * TIMER_FREQ);
 }
 
-/* Returns the number of timer ticks since the OS booted. */
+/**
+ * @brief 부팅 이후 누적된 타이머 tick 수를 반환
+ * 
+ * @details
+ * tick은 타이머 인터럽트로 세는 시간 단위
+ * 이 함수를 호출한 횟수를 의미하지는 않는다
+ * 현재 설정에서는 100 tick이 약 1초에 해당(100이 default)
+ * 
+ * @return 부팅 이후 누적된 tick 수
+ */
 int64_t
 timer_ticks (void) {
 	enum intr_level old_level = intr_disable ();
@@ -80,14 +89,37 @@ timer_ticks (void) {
 	return t;
 }
 
-/* Returns the number of timer ticks elapsed since THEN, which
-   should be a value once returned by timer_ticks(). */
+/* THEN 시점부터 지금까지 경과한 타이머 tick 수를 반환한다.
+   THEN에는 이전에 timer_ticks()로 얻은 값을 전달해야 한다. */
+
+/**
+ * @brief 기준 시점부터 경과한 tick 수를 반환
+ * 
+ * @details 현재 누적 tick에서 기준 시점의 값을 뺸다
+ * 
+ * @param[in] then 이전에 timer_ticks()로 얻은 기준값
+ * @return 기준 시점 이후 경과한 tick 수
+ */
 int64_t
 timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
-/* Suspends execution for approximately TICKS timer ticks. */
+/* 약 TICKS개의 타이머 tick이 지날 때까지
+   호출한 스레드의 실행 진행을 지연한다. */
+
+/**
+ * @brief 요청한 tick 수가 지날 때까지 다음 작업 지연시키기
+ * 
+ * @details
+ * 시작 시점의 tick을 start에 저장하고
+ * 경과 시간이 요청한 기간보다 짧으면 CPU 양보(thread_yield()를 통해서)
+ * 다시 실행되면 시간 확인하는 반복 이어간다
+ * 
+ * @param[in] ticks 기다릴 기간을 나타내는 tick 수
+ * @note 호출 시 인터럽트가 켜져 있어야 함
+ * @note 현재는 BLOCKED 상태로 잠들지 않고 시간을 반복 확인하는 busy waiting 방식 -> 이걸 우리가 해결해야함
+ */
 void
 timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
@@ -120,8 +152,15 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
-/* Timer interrupt handler. */
+
+/* 타이머 인터럽트가 발생했을 때 실행되는 처리 함수. */
+/**
+ * @brief 타이머 인터럽트가 발생했을 때 실행되는 핸들러
+ * 
+ * @details 누적 틱을 증가시키고 thread_tick호출
+ * 
+ * @note 현재는 시간 대기 중인 스레드를 깨우는 처리가 없음 - 만들어줘야함
+ */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;

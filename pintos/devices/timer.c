@@ -245,7 +245,7 @@ busy_wait (int64_t loops) {
 	while (loops-- > 0)
 		barrier ();
 }
-
+ 
 /**
  * @brief 대략 NUM/DENOM초 동안 sleep함.
  *

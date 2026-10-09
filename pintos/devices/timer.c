@@ -34,7 +34,7 @@ static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
-
+ 
 /**
  * @brief 8254 PIT(Programmable Interval Timer)가 초당 PIT_FREQ번 인터럽트를 발생시키도록 설정하고, 해당 인터럽트를 등록함
  * 

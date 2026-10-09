@@ -83,10 +83,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* List element. */
+/**
+ * @brief 이중 연결 리스트의 노드임.
+ *
+ * 데이터는 없고 prev/next 포인터만 가짐. 리스트에 넣을 구조체 안에
+ * 멤버로 심어서 쓰는 intrusive 방식임. (예: struct thread의 elem)
+ * 노드 포인터에서 원래 구조체를 복원하려면 list_entry()를 사용함.
+ *
+ * @see list_entry
+ */
 struct list_elem {
-	struct list_elem *prev;     /* Previous list element. */
-	struct list_elem *next;     /* Next list element. */
+	struct list_elem *prev;     /**< 이전 노드. */
+	struct list_elem *next;     /**< 다음 노드. */
 };
 
 /* List. */

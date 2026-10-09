@@ -13,7 +13,7 @@
 #include "threads/io.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-
+ 
 /* 8254 타이머 칩의 하드웨어 세부 사항은 [8254] 참고. */
 
 #if TIMER_FREQ < 19

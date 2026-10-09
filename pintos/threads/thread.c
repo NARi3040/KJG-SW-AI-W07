@@ -1,3 +1,11 @@
+/**
+ * @file thread.c
+ * @brief 스레드
+ * @author jye
+ * @date 2026-10-09
+ * @version 1.0
+ */
+
 #include "threads/thread.h"
 #include <debug.h>
 #include <stddef.h>
@@ -246,29 +254,54 @@ thread_create (const char *name, int priority,
 	return tid;
 }
 
+/* 현재 스레드를 대기 상태로 전환한다.
+   thread_unblock()으로 깨어나기 전까지
+   이 스레드는 다시 실행 대상으로 선택되지 않는다.
+
+   인터럽트를 끈 상태에서 호출해야 한다.
+   일반적으로는 synch.h의 동기화 도구를 사용하는 편이 더 적절하다. */
+
 /**
- * @brief 현재 스레드를 재움(sleep).  thread_unblock()으로 깨우기 전까지 다시 스케줄되지 않음.
+ * @brief 현재 스레드를 BLOCKED 상태로 전환하고 스케줄링한다
  * 
- * 이 함수는 인터럽트를 끈 상태에서 호출해야 함.  보통은 synch.h의 동기화 primitive를 사용하는 편이 더 나음.
+ * @details
+ * 현재 스레드의 상태를 THREAD_BLOCKED로 변경한 뒤 schedule()를 호출
+ * 이 스레드는 다른 코드가 thread_unblock()으로 깨워서 실행 가능하게 만들고
+ * 스케줄러가 다시 선택한 후에 호출 지점으로 복귀
  * 
- * @note 아직 뭔지 모르곘음
+ * @note 외부 인터럽트 처리 문맥에서는 호출할 수 없다
+ * @note 호출 시 인터럽트가 비활성화되어 있어야 한다
+ * @note 이 함수 자체는 깨울 시각을 기록하거나 시간을 확인하지 않음
+ * 
+ * @see thread_unblock()
+ * @see schedule()
  */
-void
-thread_block (void) {
+void thread_block (void) {
 	ASSERT (!intr_context ());
 	ASSERT (intr_get_level () == INTR_OFF);
 	thread_current ()->status = THREAD_BLOCKED;
 	schedule ();
 }
 
-/* blocked 상태의 스레드 T를 ready-to-run 상태로 전환함.
-   T가 blocked 상태가 아니면 오류임.  (실행 중인 스레드를 ready로
-   만들려면 thread_yield()를 사용할 것.)
+/* 대기 중인 스레드 T를 실행 가능한 상태로 전환한다.
+   T가 BLOCKED 상태가 아니라면 잘못된 호출이다.
+   실행 중인 스레드를 READY 상태로 바꾸려면 thread_yield()를 사용한다.
 
-   이 함수는 실행 중인 스레드를 preempt하지 않음.  이 점이 중요할 수
-   있음: 호출자가 직접 인터럽트를 꺼 두었다면, 스레드를 unblock하는
-   것과 다른 데이터를 갱신하는 것을 원자적으로 할 수 있다고
-   기대할 수 있기 때문임. */
+   이 함수 자체는 현재 실행 중인 스레드의 CPU를 빼앗지 않는다.
+   호출자가 이미 인터럽트를 꺼둔 경우, 스레드를 깨우고 다른 데이터를
+   변경하는 작업을 중간에 방해받지 않는 하나의 구간으로 처리하려 할 수 있다.
+   따라서 이 함수가 즉시 실행을 교대하지 않는다는 점이 중요하다. */
+/**
+ * @brief 대기중인(BLOCKED) 스레드를 실행 가능 상태로 전환
+ * @details 
+ * 대상 스레드의 elem을 ready_list에 연결하고 status를 THREAD_READY로 변경한다
+ * 구조체 전체를 복사하는게 아니라 목록 연결 요소를 연결
+ * 
+ * @param[in, out] t 깨울 BLOCKED 스레드를 가리키는 포인터
+ * 
+ * @note 상태 변경과 실행 후보 목록 등록이 모두 필요
+ * @note 이 함수 자체는 대상 스레드를 즉시 실행하지 않음
+ */
 void
 thread_unblock (struct thread *t) {
 	enum intr_level old_level;
@@ -338,15 +371,16 @@ thread_exit (void) {
 	NOT_REACHED ();
 }
 
-/* CPU를 양보함.  현재 스레드는 잠들지 않으며, 스케줄러의
-   판단에 따라 곧바로 다시 스케줄될 수도 있음. */
+/* CPU를 양보한다. 현재 스레드는 대기 상태로 들어가지 않는다.
+   스케줄러의 선택에 따라 이 스레드가 즉시 다시 실행될 수도 있다. */
 
 /**
- * @brief CPU를 양보함. 
+ * @brief 현재 스레드 CPU 양보
  * 
- * 현재 스레드는 잠들지(sleep) 않으며, 스케줄러의 판단에 따라 곧바로 다시 스케줄될 수도 있음.
- *
- * @note 아직 뭔지 모르곘음
+ * @details 일반 스레드는 ready_list에 들어가 다시 실행 대상 선택될 수 있음 (스케줄러에게)
+ * 
+ * @note BLOCKED 되는게 아님
+ * @note CPU 양보하고 ready_list 들가기 때문에 즉시 다시 선택될 수도 있음
  */
 void
 thread_yield (void) {

@@ -119,16 +119,20 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then; // 지금 틱과 들어온 틱을 뺴서 줌
 }
 
+/* 약 TICKS개의 타이머 tick이 지날 때까지
+   호출한 스레드의 실행 진행을 지연한다. */
+
 /**
- * @brief 지정된 틱(ticks) 동안 호출 스레드의 실행을 일시 중지함
- *
- * @param[in] ticks 일시 중지할 타이머 틱(timer tick) 수
- *
- * @note 
- * 현재 기본 구현은 Busy Waiting(thread_yield 반복 호출) 방식이므로 CPU 자원을 낭비함. 
- * 스레드를 Block 상태로 재운 뒤 지정된 틱 이후 깨우도록 개선이 필요
- *
- * @see timer_ticks(), timer_elapsed(), thread_yield()
+ * @brief 요청한 tick 수가 지날 때까지 다음 작업 지연시키기
+ * 
+ * @details
+ * 시작 시점의 tick을 start에 저장하고
+ * 경과 시간이 요청한 기간보다 짧으면 CPU 양보(thread_yield()를 통해서)
+ * 다시 실행되면 시간 확인하는 반복 이어간다
+ * 
+ * @param[in] ticks 기다릴 기간을 나타내는 tick 수
+ * @note 호출 시 인터럽트가 켜져 있어야 함
+ * @note 현재는 BLOCKED 상태로 잠들지 않고 시간을 반복 확인하는 busy waiting 방식 -> 이걸 우리가 해결해야함
  */
 void
 timer_sleep (int64_t ticks) {
@@ -190,11 +194,13 @@ timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
+/* 타이머 인터럽트가 발생했을 때 실행되는 처리 함수. */
 /**
- * @brief 타이머 인터럽트 핸들러.
+ * @brief 타이머 인터럽트가 발생했을 때 실행되는 핸들러
  * 
+ * @details 누적 틱을 증가시키고 thread_tick호출
  * 
- * @note 아직 뭔지 모르곘음
+ * @note 현재는 시간 대기 중인 스레드를 깨우는 처리가 없음 - 만들어줘야함
  */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {

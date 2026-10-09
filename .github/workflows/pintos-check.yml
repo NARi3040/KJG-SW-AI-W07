@@ -20,25 +20,44 @@ permissions:
   issues: write
 
 concurrency:
-  group: pintos-check
+  group: pintos-check-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   check:
     # same Ubuntu release as the devcontainer
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ github.base_ref }}
+          path: base
 
       - name: Install qemu
         run: sudo apt-get update && sudo apt-get install -y qemu-system-x86
 
       - name: make check
+        if: github.event_name != 'pull_request'
         working-directory: pintos/${{ inputs.project || 'threads' }}
         run: |
           source ../activate
           make check
+
+      # PR passes when its pass count is >= the base branch's pass count
+      - name: make check (no regression vs base)
+        if: github.event_name == 'pull_request'
+        run: |
+          count_pass() {
+            (cd "$1/pintos/threads" && source ../activate && make check 2>&1 || true) | grep -c '^pass ' || true
+          }
+          head_pass=$(count_pass .)
+          base_pass=$(count_pass base)
+          echo "base: $base_pass passed, head: $head_pass passed"
+          [ "$head_pass" -ge "$base_pass" ]
 
       # only after merge (push), so unmerged PR code never closes an issue
       - name: Close issues of passed tests

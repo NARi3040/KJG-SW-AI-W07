@@ -87,11 +87,16 @@ timer_calibrate (void) {
 
 
 /**
- * @brief 운영체제가 부팅된 이후 타이머가 흐른 틱 수를 반환함
- * 
- * 
- * @return 운영체제가 부팅된 이후 타이머가 흐른 틱 수를 반환함
- * @note 아직 뭔지 모르곘음
+ * @brief OS 부팅 이후 지금까지 흐른 타이머 틱 수를 반환함
+ *
+ * 전역 변수 ticks의 현재 값을 읽어서 돌려줌. 읽는 동안 인터럽트를 꺼서
+ * 타이머 인터럽트 핸들러가 ticks를 갱신하는 도중에 읽는 상황을 막음.
+ *
+ * @return 부팅 이후 경과한 타이머 틱 수 (TIMER_FREQ 틱 = 1초)
+ *
+ * @note 읽은 뒤 barrier()로 컴파일러가 이 읽기를 뒤로 재배치하지 못하게 막음.
+ *
+ * @see timer_elapsed(), timer_sleep()
  */
 int64_t
 timer_ticks (void) {

@@ -225,7 +225,7 @@ lock_held_by_current_thread (const struct lock *lock) {
 
 	return lock->holder == thread_current ();
 }
-
+
 /* 리스트에 들어가는 세마포어 하나. */
 struct semaphore_elem {
 	struct list_elem elem;              /* 리스트 요소. */

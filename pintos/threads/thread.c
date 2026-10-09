@@ -66,11 +66,26 @@ static tid_t allocate_tid (void);
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
+
 /* Returns the running thread.
  * Read the CPU's stack pointer `rsp', and then round that
  * down to the start of a page.  Since `struct thread' is
  * always at the beginning of a page and the stack pointer is
  * somewhere in the middle, this locates the curent thread. */
+
+ /**
+ * @brief 실행 중인 스레드를 반환함.
+ * 
+ * CPU의 스택 포인터 `rsp'를 읽은 뒤 페이지 시작 주소로
+ * 내림함.  `struct thread'는 항상 페이지의 맨 앞에 있고
+ * 스택 포인터는 그 중간 어딘가에 있으므로, 이렇게 하면
+ * 현재 스레드를 찾을 수 있음.
+ * 
+ * @note
+ * 이걸 굳이 이해해야될까?
+ *
+ * @see timer_ticks(), timer_elapsed(), thread_yield()
+ */
 #define running_thread() ((struct thread *) (pg_round_down (rrsp ())))
 
 
@@ -251,9 +266,19 @@ thread_name (void) {
 	return thread_current ()->name;
 }
 
-/* Returns the running thread.
-   This is running_thread() plus a couple of sanity checks.
-   See the big comment at the top of thread.h for details. */
+
+/**
+ * @brief  실행 중인 스레드를 반환하는 함수
+ * 
+ * running_thread()에 몇 가지 정합성 검사(sanity check)를 더한 것임
+ *
+ * @return 실행 중인 스레드를 반환
+ * 
+ * @note 
+ * 자세한 내용은 thread.h 상단의 큰 주석 참고. 
+ *
+ * @see running_thread(), thread.h
+ */
 struct thread *
 thread_current (void) {
 	struct thread *t = running_thread ();

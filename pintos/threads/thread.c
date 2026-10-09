@@ -142,6 +142,12 @@ thread_start (void) {
 
 /* 타이머 틱마다 타이머 인터럽트 핸들러가 호출함.
    따라서 이 함수는 외부 인터럽트 컨텍스트에서 실행됨. */
+/**
+ * @brief 타이머 틱마다 타이머 인터럽트 핸들러가 호출함. 따라서 이 함수는 외부 인터럽트 컨텍스트에서 실행됨.
+ * 
+ * 
+ * @note 아직 뭔지 모르곘음
+ */
 void
 thread_tick (void) {
 	struct thread *t = thread_current ();
@@ -161,15 +167,23 @@ thread_tick (void) {
 		intr_yield_on_return ();
 }
 
-/* 스레드 통계를 출력함. */
+/**
+ * @brief 스레드 통계를 출력함.
+ * 
+ * 
+ * @note 아직 뭔지 모르곘음
+ */
 void
 thread_print_stats (void) {
 	printf ("Thread: %lld idle ticks, %lld kernel ticks, %lld user ticks\n",
 			idle_ticks, kernel_ticks, user_ticks);
 }
 
-/* 이름이 NAME이고 초기 우선순위가 PRIORITY인 새 커널 스레드를 생성함.
-   이 스레드는 AUX를 인자로 FUNCTION을 실행하며, ready queue에
+
+/**
+ * @brief 이름이 NAME이고 초기 우선순위가 PRIORITY인 새 커널 스레드를 생성함.
+ * 
+ * 이 스레드는 AUX를 인자로 FUNCTION을 실행하며, ready queue에
    추가됨.  새 스레드의 스레드 식별자(tid)를 반환하고, 생성에
    실패하면 TID_ERROR를 반환함.
 
@@ -181,7 +195,15 @@ thread_print_stats (void) {
 
    제공된 코드는 새 스레드의 `priority' 멤버를 PRIORITY로
    설정하기만 하고, 실제 priority scheduling은 구현되어 있지 않음.
-   Priority scheduling은 Problem 1-3의 목표임. */
+   Priority scheduling은 Problem 1-3의 목표임.
+ * 
+ * @param[in] name 모름
+ * @param[in] priority 모름
+ * @param[in] function 모름
+ * @param[in] aux 모름
+ * @note 아직 뭔지 모르곘음
+ * @return tid
+ */
 tid_t
 thread_create (const char *name, int priority,
 		thread_func *function, void *aux) {
@@ -216,11 +238,13 @@ thread_create (const char *name, int priority,
 	return tid;
 }
 
-/* 현재 스레드를 재움(sleep).  thread_unblock()으로 깨우기 전까지
-   다시 스케줄되지 않음.
-
-   이 함수는 인터럽트를 끈 상태에서 호출해야 함.  보통은 synch.h의
-   동기화 primitive를 사용하는 편이 더 나음. */
+/**
+ * @brief 현재 스레드를 재움(sleep).  thread_unblock()으로 깨우기 전까지 다시 스케줄되지 않음.
+ * 
+ * 이 함수는 인터럽트를 끈 상태에서 호출해야 함.  보통은 synch.h의 동기화 primitive를 사용하는 편이 더 나음.
+ * 
+ * @note 아직 뭔지 모르곘음
+ */
 void
 thread_block (void) {
 	ASSERT (!intr_context ());
@@ -256,9 +280,18 @@ thread_name (void) {
 	return thread_current ()->name;
 }
 
-/* 실행 중인 스레드를 반환함.
-   running_thread()에 몇 가지 정합성 검사(sanity check)를 더한 것임.
-   자세한 내용은 thread.h 상단의 큰 주석 참고. */
+
+/**
+ * @brief  실행 중인 스레드를 반환함.
+ * 
+ * running_thread()에 몇 가지 정합성 검사(sanity check)를 더한 것임
+ *
+ *
+ * @note 
+ * 자세한 내용은 thread.h 상단의 큰 주석 참고. 
+ *
+ * @see thread.h
+ */
 struct thread *
 thread_current (void) {
 	struct thread *t = running_thread ();
@@ -300,9 +333,9 @@ thread_exit (void) {
    판단에 따라 곧바로 다시 스케줄될 수도 있음. */
 
 /**
- * @brief CPU를 양보함. 현재 스레드는 잠들지(sleep) 않으며, 스케줄러의 판단에 따라 곧바로 다시 스케줄될 수도 있음.
+ * @brief CPU를 양보함. 
  * 
- * 
+ * 현재 스레드는 잠들지(sleep) 않으며, 스케줄러의 판단에 따라 곧바로 다시 스케줄될 수도 있음.
  *
  * @note 아직 뭔지 모르곘음
  */

@@ -1,9 +1,7 @@
 /**
  * @file thread.c
  * @brief 스레드
- * @author jye
- * @date 2026-10-09
- * @version 1.0
+ * @date 2026-10-10
  */
 
 #include "threads/thread.h"
@@ -38,7 +36,7 @@ static struct list ready_list;
 
 /**
  * @brief sleep에 들어간 쓰레드 목록
- * 
+ *
  * 이중 연결 리스트로 구현 되있음.
  */
 struct list sleep_list;
@@ -81,14 +79,14 @@ static tid_t allocate_tid (void);
 /* T가 유효한 스레드를 가리키는 것으로 보이면 true를 반환함. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
- /**
+/**
  * @brief 실행 중인 스레드를 반환함.
- * 
+ *
  * CPU의 스택 포인터 `rsp'를 읽은 뒤 페이지 시작 주소로
  * 내림함.  `struct thread'는 항상 페이지의 맨 앞에 있고
  * 스택 포인터는 그 중간 어딘가에 있으므로, 이렇게 하면
  * 현재 스레드를 찾을 수 있음.
- * 
+ *
  * @note
  * 이걸 굳이 이해해야될까?
  *
@@ -102,25 +100,24 @@ static tid_t allocate_tid (void);
 // 설정해야 함.
 static uint64_t gdt[3] = { 0, 0x00af9a000000ffff, 0x00cf92000000ffff };
 
-/* 현재 실행 중인 코드를 스레드로 변환해 스레딩 시스템을 초기화함.
-   일반적으로는 불가능하며, 이 경우에만 가능한 이유는 loader.S가
-   스택의 맨 아래를 페이지 경계에 두도록 신경 썼기 때문임.
-
-   run queue와 tid lock도 함께 초기화함.
-
-   이 함수를 호출한 뒤에는, thread_create()로 스레드를 만들기 전에
-   반드시 page allocator를 초기화할 것.
-
-   이 함수가 끝나기 전에는 thread_current()를 호출하는 것이
-   안전하지 않음. */
-
 /**
  * @brief main()이 호출하여 스레드 시스템을 초기화
- * 
- * Pintos의 초기 스레드(initial thread)를 위한 struct thread를 만드는 것
- * thread_init()은 Pintos 초기화 과정의 아주 이른 시점에 호출된다.
- * 
- * @note 아직 뭔지 모르곘음
+ *
+ * 현재 실행 중인 코드를 스레드로 변환해 Pintos의 초기 스레드(initial thread)를
+ * 위한 struct thread를 만들고, run queue와 tid lock도 함께 초기화함.
+ *
+ * @details
+ * 일반적으로는 불가능하며, 이 경우에만 가능한 이유는 loader.S가 스택의 맨 아래를
+ * 페이지 경계에 두도록 신경 썼기 때문임. 즉 Pintos 로더(loader)가 초기 스레드의
+ * 스택을 다른 모든 Pintos 스레드와 같은 위치, 즉 페이지의 맨 위에 둠.
+ *
+ * thread_init()이 끝나기 전에는 실행 중인 스레드의 magic 값이 올바르지 않으므로
+ * thread_current()를 호출하는 것이 안전하지 않음(실패함). lock_acquire()를
+ * 포함해 많은 함수가 thread_current()를 직간접적으로 호출하기 때문에,
+ * thread_init()은 Pintos 초기화 과정의 아주 이른 시점에 호출됨.
+ *
+ * @note 이 함수를 호출한 뒤에는, thread_create()로 스레드를 만들기 전에
+ *       반드시 page allocator를 초기화할 것
  */
 void
 thread_init (void) {
@@ -148,8 +145,17 @@ thread_init (void) {
 	initial_thread->tid = allocate_tid ();
 }
 
-/* 인터럽트를 활성화해 preemptive 스레드 스케줄링을 시작함.
-   idle 스레드도 함께 생성함. */
+/**
+ * @brief main()이 호출하여 스케줄러를 시작함
+ *
+ * 인터럽트를 활성화해 preemptive 스레드 스케줄링을 시작하고, idle 스레드도 함께 생성함.
+ *
+ * @details
+ * 유휴 스레드(idle thread), 즉 준비된 스레드가 하나도 없을 때 스케줄되는
+ * 스레드를 생성함. 그다음 인터럽트를 활성화하는데, 스케줄러는 타이머
+ * 인터럽트에서 복귀할 때 intr_yield_on_return()을 사용해 실행되므로
+ * 이것이 부수 효과로 스케줄러도 활성화함.
+ */
 void
 thread_start (void) {
 	/* idle 스레드를 생성함. */
@@ -164,12 +170,12 @@ thread_start (void) {
 	sema_down (&idle_started);
 }
 
-/* 타이머 틱마다 타이머 인터럽트 핸들러가 호출함.
-   따라서 이 함수는 외부 인터럽트 컨텍스트에서 실행됨. */
 /**
  * @brief 타이머 틱마다 타이머 인터럽트 핸들러가 호출함. 따라서 이 함수는 외부 인터럽트 컨텍스트에서 실행됨.
- * 
- * 
+ *
+ * @details
+ * 스레드 통계를 추적하고, 타임 슬라이스(time slice)가 만료되면 스케줄러를 작동시킴.
+ *
  * @note 아직 뭔지 모르곘음
  */
 void
@@ -193,8 +199,9 @@ thread_tick (void) {
 
 /**
  * @brief 스레드 통계를 출력함.
- * 
- * 
+ *
+ * @details Pintos 종료 시 호출됨.
+ *
  * @note 아직 뭔지 모르곘음
  */
 void
@@ -206,27 +213,28 @@ thread_print_stats (void) {
 
 /**
  * @brief 이름이 NAME이고 초기 우선순위가 PRIORITY인 새 커널 스레드를 생성함.
- * 
- * 이 스레드는 AUX를 인자로 FUNCTION을 실행하며, ready queue에
-   추가됨.  새 스레드의 스레드 식별자(tid)를 반환하고, 생성에
-   실패하면 TID_ERROR를 반환함.
-
-   thread_start()가 호출된 상태라면 thread_create()가 반환되기
-   전에 새 스레드가 스케줄될 수 있음.  심지어 thread_create()가
-   반환되기 전에 종료될 수도 있음.  반대로, 새 스레드가 스케줄되기
-   전까지 원래 스레드가 얼마든지 오래 실행될 수도 있음.  실행 순서를
-   보장해야 한다면 세마포어나 다른 동기화 수단을 사용할 것.
-
-   제공된 코드는 새 스레드의 `priority' 멤버를 PRIORITY로
-   설정하기만 하고, 실제 priority scheduling은 구현되어 있지 않음.
-   Priority scheduling은 Problem 1-3의 목표임.
- * 
- * @param[in] name 모름
- * @param[in] priority 모름
- * @param[in] function 모름
- * @param[in] aux 모름
+ *
+ * 이 스레드는 AUX를 인자로 FUNCTION을 실행하며, ready queue에 추가됨.
+ *
+ * @details
+ * 스레드의 struct thread와 스택을 위한 페이지를 할당하고 멤버들을 초기화한 뒤,
+ * 가짜 스택 프레임(fake stack frame) 묶음을 설정함. 스레드는 blocked 상태로
+ * 초기화되었다가, 반환 직전에 unblock되어 새 스레드가 스케줄될 수 있게 됨.
+ *
+ * thread_start()가 호출된 상태라면 thread_create()가 반환되기 전에 새 스레드가
+ * 스케줄될 수 있고, 심지어 반환되기 전에 종료될 수도 있음. 반대로, 새 스레드가
+ * 스케줄되기 전까지 원래 스레드가 얼마든지 오래 실행될 수도 있음.
+ *
+ * @param[in] name 새 스레드의 이름
+ * @param[in] priority 새 스레드의 초기 우선순위
+ * @param[in] function 새 스레드가 실행할 함수 (thread_func 타입)
+ * @param[in] aux function의 유일한 인자로 그대로 전달됨
+ * @return 새 스레드의 스레드 식별자(tid). 생성에 실패하면 TID_ERROR
+ *
+ * @note 실행 순서를 보장해야 한다면 세마포어나 다른 동기화 수단을 사용할 것
+ * @note 제공된 코드는 새 스레드의 `priority' 멤버를 PRIORITY로 설정하기만 하고,
+ *       실제 priority scheduling은 구현되어 있지 않음. Problem 1-3의 목표임
  * @note 아직 뭔지 모르곘음
- * @return tid
  */
 tid_t
 thread_create (const char *name, int priority,
@@ -262,25 +270,24 @@ thread_create (const char *name, int priority,
 	return tid;
 }
 
-/* 현재 스레드를 대기 상태로 전환한다.
-   thread_unblock()으로 깨어나기 전까지
-   이 스레드는 다시 실행 대상으로 선택되지 않는다.
-
-   인터럽트를 끈 상태에서 호출해야 한다.
-   일반적으로는 synch.h의 동기화 도구를 사용하는 편이 더 적절하다. */
-
 /**
- * @brief 현재 스레드를 BLOCKED 상태로 전환하고 스케줄링한다
- * 
+ * @brief 현재 스레드를 BLOCKED 상태로 전환하고 스케줄링함
+ *
  * @details
  * 현재 스레드의 상태를 THREAD_BLOCKED로 변경한 뒤 schedule()를 호출
  * 이 스레드는 다른 코드가 thread_unblock()으로 깨워서 실행 가능하게 만들고
  * 스케줄러가 다시 선택한 후에 호출 지점으로 복귀
- * 
- * @note 외부 인터럽트 처리 문맥에서는 호출할 수 없다
- * @note 호출 시 인터럽트가 비활성화되어 있어야 한다
+ *
+ * thread_unblock()으로 깨어나기 전까지 다시 실행 대상으로 선택되지 않으므로,
+ * 그렇게 되도록 미리 방법을 마련해 두어야 함. 너무 저수준(low-level)이므로,
+ * 일반적으로는 synch.h의 동기화 기본 요소(synchronization primitive)를 사용하는 편이 낫음.
+ * 블록된 스레드가 무엇을 기다리는지 선험적으로 알아낼 방법은 없지만,
+ * 백트레이스(backtrace)가 도움이 될 수 있음.
+ *
+ * @note 외부 인터럽트 처리 문맥에서는 호출할 수 없음
+ * @note 호출 시 인터럽트가 비활성화되어 있어야 함
  * @note 이 함수 자체는 깨울 시각을 기록하거나 시간을 확인하지 않음
- * 
+ *
  * @see thread_unblock()
  * @see schedule()
  */
@@ -291,22 +298,22 @@ void thread_block (void) {
 	schedule ();
 }
 
-/* 대기 중인 스레드 T를 실행 가능한 상태로 전환한다.
-   T가 BLOCKED 상태가 아니라면 잘못된 호출이다.
-   실행 중인 스레드를 READY 상태로 바꾸려면 thread_yield()를 사용한다.
-
-   이 함수 자체는 현재 실행 중인 스레드의 CPU를 빼앗지 않는다.
-   호출자가 이미 인터럽트를 꺼둔 경우, 스레드를 깨우고 다른 데이터를
-   변경하는 작업을 중간에 방해받지 않는 하나의 구간으로 처리하려 할 수 있다.
-   따라서 이 함수가 즉시 실행을 교대하지 않는다는 점이 중요하다. */
 /**
  * @brief 대기중인(BLOCKED) 스레드를 실행 가능 상태로 전환
- * @details 
- * 대상 스레드의 elem을 ready_list에 연결하고 status를 THREAD_READY로 변경한다
+ *
+ * @details
+ * 대상 스레드의 elem을 ready_list에 연결하고 status를 THREAD_READY로 변경함
  * 구조체 전체를 복사하는게 아니라 목록 연결 요소를 연결
- * 
+ *
+ * 스레드가 기다리던 이벤트가 발생했을 때(예: 기다리던 락이 사용 가능해졌을 때) 호출됨.
+ * 이 함수는 현재 실행 중인 스레드의 CPU를 빼앗지 않음. 호출자가 이미 인터럽트를
+ * 꺼둔 경우, 스레드를 깨우고 다른 데이터를 변경하는 작업을 중간에 방해받지 않는
+ * 하나의 구간으로 처리하려 할 수 있기 때문에 즉시 실행을 교대하지 않는 것이 중요함.
+ *
  * @param[in, out] t 깨울 BLOCKED 스레드를 가리키는 포인터
- * 
+ *
+ * @note t가 BLOCKED 상태가 아니라면 잘못된 호출임
+ * @note 실행 중인 스레드를 READY 상태로 바꾸려면 thread_yield()를 사용
  * @note 상태 변경과 실행 후보 목록 등록이 모두 필요
  * @note 이 함수 자체는 대상 스레드를 즉시 실행하지 않음
  */
@@ -323,7 +330,11 @@ thread_unblock (struct thread *t) {
 	intr_set_level (old_level);
 }
 
-/* 실행 중인 스레드의 이름을 반환함. */
+/**
+ * @brief 실행 중인 스레드의 이름을 반환함
+ *
+ * @details thread_current ()->name과 같음.
+ */
 const char *
 thread_name (void) {
 	return thread_current ()->name;
@@ -332,11 +343,11 @@ thread_name (void) {
 
 /**
  * @brief  실행 중인 스레드를 반환하는 함수
- * 
+ *
  * running_thread()에 몇 가지 정합성 검사(sanity check)를 더한 것임
  *
  * @return 실행 중인 스레드를 반환
- * 
+ *
  * @note 
  * 자세한 내용은 thread.h 상단의 큰 주석 참고. 
  *
@@ -356,14 +367,21 @@ thread_current (void) {
 	return t;
 }
 
-/* 실행 중인 스레드의 tid를 반환함. */
+/**
+ * @brief 실행 중인 스레드의 tid를 반환함
+ *
+ * @details thread_current ()->tid와 같음.
+ */
 tid_t
 thread_tid (void) {
 	return thread_current ()->tid;
 }
 
-/* 현재 스레드를 스케줄 대상에서 제외하고 제거함.  호출자에게
-   절대 반환되지 않음. */
+/**
+ * @brief 현재 스레드를 스케줄 대상에서 제외하고 제거함
+ *
+ * @note 절대 반환하지 않는다 (NO_RETURN)
+ */
 void
 thread_exit (void) {
 	ASSERT (!intr_context ());
@@ -379,16 +397,15 @@ thread_exit (void) {
 	NOT_REACHED ();
 }
 
-/* CPU를 양보한다. 현재 스레드는 대기 상태로 들어가지 않는다.
-   스케줄러의 선택에 따라 이 스레드가 즉시 다시 실행될 수도 있다. */
-
 /**
- * @brief 현재 스레드 CPU 양보
- * 
+ * @brief 현재 스레드 CPU 양보 (대기 상태로 들어가지 않음)
+ *
  * @details 일반 스레드는 ready_list에 들어가 다시 실행 대상 선택될 수 있음 (스케줄러에게)
- * 
+ *
  * @note BLOCKED 되는게 아님
  * @note CPU 양보하고 ready_list 들가기 때문에 즉시 다시 선택될 수도 있음
+ * @note 새로 선택된 스레드가 현재 스레드일 수도 있으므로, 이 함수로 현재 스레드가
+ *       특정 시간 동안 실행되지 않도록 만들 수 있다고 기대해서는 안 됨
  */
 void
 thread_yield (void) {
@@ -404,19 +421,33 @@ thread_yield (void) {
 	intr_set_level (old_level);
 }
 
-/* 현재 스레드의 우선순위를 NEW_PRIORITY로 설정함. */
+/**
+ * @brief 현재 스레드의 우선순위를 NEW_PRIORITY로 설정함
+ *
+ * @details
+ * 우선순위는 PRI_MIN(0)부터 PRI_MAX(63)까지이며, 숫자가 낮을수록 우선순위가 낮음.
+ * 제공된 Pintos는 우선순위를 무시하며, 프로젝트 1에서 우선순위 스케줄링을 구현함.
+ *
+ * @note 현재는 스텁(stub) 함수
+ */
 void
 thread_set_priority (int new_priority) {
 	thread_current ()->priority = new_priority;
 }
 
-/* 현재 스레드의 우선순위를 반환함. */
+/**
+ * @brief 현재 스레드의 우선순위를 반환함
+ *
+ * @note 현재는 스텁(stub) 함수
+ */
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
 }
 
-/* 현재 스레드의 nice 값을 NICE로 설정함. */
+/* 현재 스레드의 nice 값을 NICE로 설정함.
+   (thread_set_nice, thread_get_nice, thread_get_recent_cpu, thread_get_load_avg는
+   고급 스케줄러(advanced scheduler)를 위한 스텁 함수들임.) */
 void
 thread_set_nice (int nice UNUSED) {
 	/* TODO: 여기에 구현을 작성할 것 */

@@ -24,6 +24,7 @@ test_alarm_priority (void)
   wake_time = timer_ticks () + 5 * TIMER_FREQ;
   sema_init (&wait_sema, 0);
   
+  // 우선 순위를 넣어서 우선순위를 넣어준다.
   for (i = 0; i < 10; i++) 
     {
       int priority = PRI_DEFAULT - (i + 5) % 10 - 1;
@@ -32,8 +33,10 @@ test_alarm_priority (void)
       thread_create (name, priority, alarm_priority_thread, NULL);
     }
 
+  // 스레드 우선 순위를 0으로 초기화 
   thread_set_priority (PRI_MIN);
 
+  // ?
   for (i = 0; i < 10; i++)
     sema_down (&wait_sema);
 }

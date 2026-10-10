@@ -1,7 +1,7 @@
 /**
  * @file timer.c 
  * @brief 8254 PIT(Programmable Interval Timer) 기반 타이머 구현.
- * @date 2026-10-08
+ * @date 2026-10-10
  */
 
 #include "devices/timer.h"
@@ -119,28 +119,33 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then; // 지금 틱과 들어온 틱을 뺴서 줌
 }
 
-/* 약 TICKS개의 타이머 tick이 지날 때까지
-   호출한 스레드의 실행 진행을 지연한다. */
+/* sleep_list를 wakeup_tick 오름차순으로 유지하기 위한 비교 함수 */
+static bool
+wakeup_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	return list_entry (a, struct thread, elem)->wakeup_tick
+		< list_entry (b, struct thread, elem)->wakeup_tick;
+}
 
 /**
  * @brief 요청한 tick 수가 지날 때까지 다음 작업 지연시키기
  * 
  * @details
- * 시작 시점의 tick을 start에 저장하고
- * 경과 시간이 요청한 기간보다 짧으면 CPU 양보(thread_yield()를 통해서)
- * 다시 실행되면 시간 확인하는 반복 이어간다
- * 
+ * 인터럽트를 끈 상태에서 현재 스레드의 깨울 시각(절대 틱)을 계산해 wakeup_tick에 저장하고
+ * sleep_list에 오름차순으로 끼워 넣은 뒤 BLOCKED 상태로 잠든다.
+ * 깨우는 일은 timer_interrupt()가 맡는다.
+ *
  * @param[in] ticks 기다릴 기간을 나타내는 tick 수
  * @note 호출 시 인터럽트가 켜져 있어야 함
- * @note 현재는 BLOCKED 상태로 잠들지 않고 시간을 반복 확인하는 busy waiting 방식 -> 이걸 우리가 해결해야함
  */
 void
 timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks (); // 시작 시점의 tick 기록
-
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks) // 목표 tick이 지날 때까지 반복
-		thread_yield (); // CPU 제어권을 다른 스레드에 양보 (Ready 상태로 전이)
+	enum intr_level old_level = intr_disable();
+	struct thread *curr = thread_current(); // 멈출 스레드
+	curr->wakeup_tick = timer_ticks () + ticks; // 일어날 시간을 절대 틱으로 저장
+	list_insert_ordered(&sleep_list, &curr->elem, wakeup_less, NULL); // 깨울 시각 오름차순 유지
+	thread_block();
+	intr_set_level(old_level);
 }
 
 /**
@@ -198,13 +203,21 @@ timer_print_stats (void) {
 /**
  * @brief 타이머 인터럽트가 발생했을 때 실행되는 핸들러
  * 
- * @details 누적 틱을 증가시키고 thread_tick호출
- * 
- * @note 현재는 시간 대기 중인 스레드를 깨우는 처리가 없음 - 만들어줘야함
+ * @details 누적 틱을 증가시키고, sleep_list 앞에서부터 깰 시각이 된 스레드를 꺼내 깨운 뒤 thread_tick호출
+ *
+ * @note sleep_list가 wakeup_tick 오름차순이라 깰 시각이 안 된 스레드를 만나면 순회를 멈춤
  */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
+	for (struct list_elem *e = list_begin(&sleep_list); e != list_end(&sleep_list); ) {
+		struct thread *t = list_entry(e, struct thread, elem);
+		if (t->wakeup_tick <= ticks) {
+			e = list_remove(e);   // 제거하고 다음 원소 반환
+			thread_unblock(t);
+		} else
+			break;                // 정렬돼 있으므로 이후 원소는 모두 아직 깰 시각 아님
+	}
 	thread_tick ();
 }
 
@@ -245,7 +258,7 @@ busy_wait (int64_t loops) {
 	while (loops-- > 0)
 		barrier ();
 }
-
+ 
 /**
  * @brief 대략 NUM/DENOM초 동안 sleep함.
  *

@@ -107,6 +107,10 @@ struct thread {
 	/* thread.c와 synch.c가 공유함. */
 	struct list_elem elem;              /* 리스트 요소. */
 
+	/* Alarm Clock에서 사용함. */
+	int64_t wakeup_tick;                /* 깨울 시각 */
+	struct list_elem sleep_elem;        /* 잠든 목록에 연결할 요소*/
+
 #ifdef USERPROG
 	/* userprog/process.c가 소유함. */
 	uint64_t *pml4;                     /* Page map level 4 */

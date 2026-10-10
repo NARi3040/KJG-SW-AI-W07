@@ -123,24 +123,31 @@ timer_elapsed (int64_t then) {
    호출한 스레드의 실행 진행을 지연한다. */
 
 /**
- * @brief 요청한 tick 수가 지날 때까지 다음 작업 지연시키기
+ * @brief 요청한 tick 수가 지날 때까지 현재 스레드를 대기시킨다
  * 
  * @details
- * 시작 시점의 tick을 start에 저장하고
- * 경과 시간이 요청한 기간보다 짧으면 CPU 양보(thread_yield()를 통해서)
- * 다시 실행되면 시간 확인하는 반복 이어간다
+ * 현재 tick에 대기 기간을 더해 깨울 시각을 계산하고
+ * thread_sleep()으로 대기 등록과 BLOCKED 전환을 요청
  * 
  * @param[in] ticks 기다릴 기간을 나타내는 tick 수
  * @note 호출 시 인터럽트가 켜져 있어야 함
- * @note 현재는 BLOCKED 상태로 잠들지 않고 시간을 반복 확인하는 busy waiting 방식 -> 이걸 우리가 해결해야함
+ * @note ticks가 0이하면 즉시 반환
+ * @note 시간이 되면 실행 후보가 되며, 실제 재개는 스케줄러의 선택에 따름
  */
 void
 timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks (); // 시작 시점의 tick 기록
+	ASSERT(intr_get_level() == INTR_ON);		// 호출 시 인터럽트가 켜져 있는지 검사. 켜주는 명령은 아님
 
-	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks) // 목표 tick이 지날 때까지 반복
-		thread_yield (); // CPU 제어권을 다른 스레드에 양보 (Ready 상태로 전이)
+	if (ticks <= 0)		// 0 or 음수면 기다릴 시간이 없으므로 BLOCKED로 만들지 않고 바로 반환
+	{
+		return;		// 기다릴 기간이 없으면 대기 상태로 들어가지 않음
+	}
+
+	enum intr_level old_level = intr_disable();		// 인터럽트 끄기 전 상태는 old_level에 기록
+	int64_t wakeup_tick = timer_ticks() + ticks;	// 기다릴 기간을 꺠울 누적 시간으로 반환. ex) 500 + 30 = 530
+
+	thread_sleep(wakeup_tick);		// 대기 목록에 등록하고 BLOCKED로 전환. 깨어나 스케줄러가 다시 선택해야 이 호출에서 돌아옴
+	intr_set_level(old_level);		// 실행을 재개한 뒤, 이 함수에서 끄기 전의 인터럽트 상태로 복원
 }
 
 /**
@@ -204,8 +211,9 @@ timer_print_stats (void) {
  */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
-	ticks++;
-	thread_tick ();
+	ticks++;		// 현재 tick을 1증가 시키기
+	thread_awake(ticks);		// 기한이 된 대기 스레드를 모두 READY로 만들기
+	thread_tick ();		// 기존 실행 시간 통계와 선점 요청을 처리
 }
 
 

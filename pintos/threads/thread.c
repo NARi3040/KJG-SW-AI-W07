@@ -36,6 +36,9 @@
    실제로 실행 중은 아닌 프로세스들. */
 static struct list ready_list;
 
+static struct list sleep_list;		/* 시간 대기 중인 스레드 목록  */
+
+
 /* idle 스레드. */
 static struct thread *idle_thread;
 
@@ -70,6 +73,9 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
+static void sleep_list_insert (struct thread *t);
+static bool wakeup_tick_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
 
 /* T가 유효한 스레드를 가리키는 것으로 보이면 true를 반환함. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -131,6 +137,7 @@ thread_init (void) {
 	/* 전역 스레드 컨텍스트를 초기화함 */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&sleep_list);
 	list_init (&destruction_req);
 
 	/* 실행 중인 스레드를 위한 thread 구조체를 설정함. */
@@ -276,11 +283,29 @@ thread_create (const char *name, int priority,
  * @see thread_unblock()
  * @see schedule()
  */
-void thread_block (void) {
-	ASSERT (!intr_context ());
-	ASSERT (intr_get_level () == INTR_OFF);
-	thread_current ()->status = THREAD_BLOCKED;
-	schedule ();
+void thread_block (void) {		// ASSERT: 조건검사 - 이 조검이 참어어야 하며, 아니라면 오류를 알리고 실행을 중단
+	ASSERT (!intr_context ());		// 외부 인터럽트 핸들러 안에서 호출한 것이 아닌지 검사
+	ASSERT (intr_get_level () == INTR_OFF);		// 인터럽트가 꺼져있는지 검사
+	thread_current ()->status = THREAD_BLOCKED;		// 현재 스레드 상태를 BLOCKED로 변경
+	schedule ();		// 다음 실행 대상을 선택하고 실행을 넘김
+}
+
+void thread_awake(int64_t now_tick) {
+	ASSERT(intr_get_level() == INTR_OFF);
+
+	while (!list_empty(&sleep_list))		// 빈 목록이면 아무 작업도 하지 않음
+	{
+		struct list_elem *e = list_front(&sleep_list);
+		struct thread *t = list_entry(e, struct thread, elem);
+		/*기한 확인 > 필요하면 반복 종료 > 제거 > 깨우기*/
+		int64_t thread_date = t->wakeup_tick;
+		if (thread_date > now_tick)
+		{
+			break;		// sleep_list 맨 앞 스레드의 기한이 아직 미래라면 반복 종료
+		}
+		list_pop_front(&sleep_list);		// 기한이 됐으면 sleep_list에서 제거
+		thread_unblock(t);		// READY 상태로 전환
+	}
 }
 
 /* 대기 중인 스레드 T를 실행 가능한 상태로 전환한다.
@@ -313,6 +338,36 @@ thread_unblock (struct thread *t) {
 	list_push_back (&ready_list, &t->elem);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
+}
+
+static bool wakeup_tick_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	const struct thread *thread_a = list_entry(a, struct thread, elem);		// a를 포함한 스레드 찾기
+	const struct thread *thread_b = list_entry(b, struct thread, elem);		// b를 포함한 스레드 찾기
+
+	return thread_a->wakeup_tick < thread_b->wakeup_tick;		// a의 깨울 시각이 b보다 이르면 true, a를 b 앞에 배치
+}
+
+static void sleep_list_insert (struct thread *t) {
+	if (list_empty(&sleep_list))	// sleep_list가 비어있으면
+	{
+		list_push_back(&sleep_list, &t->elem);	// list_push_back는 맨 뒤에 넣는 함수, 비어있으면 차피 마지막 요소니까 이걸로 연결
+		return;
+	}
+	list_insert_ordered(&sleep_list, &t->elem, wakeup_tick_less, NULL);
+}
+
+void thread_sleep (int64_t wakeup_tick) {
+	ASSERT(!intr_context());		// 외부 인터럽트 핸드러에서 호출하지 않았는지 검사
+
+	enum intr_level old_level = intr_disable();		// 인터럽트를 끄고, 이전 ON/OFF 상태를 반환	->	인터럽트를 끄는 이유는 목록에 등록은 했지만 아직 BLOCKED가 아닌 순간에 타이머가 끼어들어 꺠우려고 하는 상황을 막기 위해서
+	struct thread *current = thread_current();		// 현재 실행 중인 스레드의 포인터를 얻음
+
+	current->wakeup_tick = wakeup_tick;		// 꺠울 시간 설정해주기
+	sleep_list_insert(current);		// sleep_list에 정렬해서 저장하기
+	thread_block();		// BLOCKED상태로 변경하고 스케쥴링~
+
+	intr_set_level(old_level);		// 깨어나 다시 실행된 뒤  이전 인터럽트 상태로 복원하기
+
 }
 
 /* 실행 중인 스레드의 이름을 반환함. */

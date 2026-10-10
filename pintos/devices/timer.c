@@ -203,11 +203,13 @@ timer_print_stats (void) {
 
 /* 타이머 인터럽트가 발생했을 때 실행되는 처리 함수. */
 /**
- * @brief 타이머 인터럽트가 발생했을 때 실행되는 핸들러
+ * @brief 타이머 tick 갱신하고 기한 된 대기 스레드 꺠우기
  * 
- * @details 누적 틱을 증가시키고 thread_tick호출
+ * @details 누적 tick을 증가시킨 뒤에 thread_awake()
+ * 를 호출하고, thread_tick()으로 기존 실행 시간 처리 수행
  * 
- * @note 현재는 시간 대기 중인 스레드를 깨우는 처리가 없음 - 만들어줘야함
+ * @note 외부 인터럽트 처리 문맥에서 실행되며 인터럽트는 꺼져 있음
+ * @note 깨운 스레드는 READY 상태로 변경됨. 즉시 실행한다는 건 아니고 상태 READY
  */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {

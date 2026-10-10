@@ -394,7 +394,7 @@ thread_exit (void) {
 	do_schedule (THREAD_DYING);
 	NOT_REACHED ();
 }
-
+ 
 /**
  * @brief 현재 스레드 CPU 양보 (대기 상태로 들어가지 않음)
  *

@@ -1,7 +1,7 @@
 /**
  * @file timer.c 
  * @brief 8254 PIT(Programmable Interval Timer) 기반 타이머 구현.
- * @date 2026-10-08
+ * @date 2026-10-10
  */
 
 #include "devices/timer.h"
@@ -26,6 +26,9 @@
 /* OS 부팅 이후 지난 타이머 틱 수. */
 static int64_t ticks;
 
+/* 잠든 스레드들을 관리하는 목록. */
+static struct list sleep_list;
+
 /* 타이머 틱 하나당 루프 횟수.
    timer_calibrate()가 초기화함. */
 static unsigned loops_per_tick;
@@ -35,6 +38,35 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
+/**
+ * @brief 두 스레드의 깨울 시각을 비교한다.
+ *
+ * @details
+ * a와 b가 가리키는 sleep_elem에서 각각의 스레드를 찾고,
+ * wakeup_tick을 비교한다. 잠든 스레드 목록을 깨울 시각의
+ * 오름차순으로 유지하기 위한 비교 함수다.
+ *
+ * @param[in] a 첫 번째 스레드의 sleep_elem을 가리키는 포인터
+ * @param[in] b 두 번째 스레드의 sleep_elem을 가리키는 포인터
+ * @param[in] aux 추가 비교 정보. 이 함수에서는 사용하지 않는다.
+ *
+ * @retval true a의 깨울 시각이 b보다 이르다.
+ * @retval false a의 깨울 시각이 b와 같거나 더 늦다.
+ *
+ * @see list_insert_ordered()
+ */
+static bool
+wakeup_less (const struct list_elem *a,
+             const struct list_elem *b,
+             void *aux UNUSED) {
+    const struct thread *ta =
+        list_entry (a, struct thread, sleep_elem);
+    const struct thread *tb =
+        list_entry (b, struct thread, sleep_elem);
+
+    return ta->wakeup_tick < tb->wakeup_tick;
+}
+ 
 /**
  * @brief 8254 PIT(Programmable Interval Timer)가 초당 PIT_FREQ번 인터럽트를 발생시키도록 설정하고, 해당 인터럽트를 등록함
  * 
@@ -46,6 +78,9 @@ timer_init (void) {
 	/* 8254 입력 주파수를 TIMER_FREQ로 나눈 값.
 	   가장 가까운 정수로 반올림. */
 	uint16_t count = (1193180 + TIMER_FREQ / 2) / TIMER_FREQ;
+
+	/* 목록 초기화 */
+	list_init (&sleep_list);
 
 	outb (0x43, 0x34);    /* CW: 카운터 0, LSB 다음 MSB, 모드 2, 바이너리. */
 	outb (0x40, count & 0xff);
@@ -119,36 +154,35 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then; // 지금 틱과 들어온 틱을 뺴서 줌
 }
 
-/* 약 TICKS개의 타이머 tick이 지날 때까지
-   호출한 스레드의 실행 진행을 지연한다. */
+/* sleep_list를 wakeup_tick 오름차순으로 유지하기 위한 비교 함수 */
+static bool
+wakeup_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+	return list_entry (a, struct thread, elem)->wakeup_tick
+		< list_entry (b, struct thread, elem)->wakeup_tick;
+}
 
 /**
- * @brief 요청한 tick 수가 지날 때까지 현재 스레드를 대기시킨다
- * 
+ * @brief 요청한 tick 수가 지날 때까지 현재 스레드를 재운다.
+ *
  * @details
- * 현재 tick에 대기 기간을 더해 깨울 시각을 계산하고
- * thread_sleep()으로 대기 등록과 BLOCKED 전환을 요청
- * 
+ * 인터럽트를 끈 상태에서 현재 스레드의 깨울 시각(절대 틱)을 계산해 wakeup_tick에 저장하고
+ * sleep_list에 오름차순으로 끼워 넣은 뒤 BLOCKED 상태로 잠든다.
+ * 깨우는 일은 timer_interrupt()가 맡는다.
+ *
  * @param[in] ticks 기다릴 기간을 나타내는 tick 수
  * @note 호출 시 인터럽트가 켜져 있어야 함
- * @note ticks가 0이하면 즉시 반환
- * @note 시간이 되면 실행 후보가 되며, 실제 재개는 스케줄러의 선택에 따름
  */
 void
 timer_sleep (int64_t ticks) {
-	ASSERT(intr_get_level() == INTR_ON);		// 호출 시 인터럽트가 켜져 있는지 검사. 켜주는 명령은 아님
-
-	if (ticks <= 0)		// 0 or 음수면 기다릴 시간이 없으므로 BLOCKED로 만들지 않고 바로 반환
-	{
-		return;		// 기다릴 기간이 없으면 대기 상태로 들어가지 않음
-	}
-
-	enum intr_level old_level = intr_disable();		// 인터럽트 끄기 전 상태는 old_level에 기록
-	int64_t wakeup_tick = timer_ticks() + ticks;	// 기다릴 기간을 꺠울 누적 시간으로 반환. ex) 500 + 30 = 530
-
-	thread_sleep(wakeup_tick);		// 대기 목록에 등록하고 BLOCKED로 전환. 깨어나 스케줄러가 다시 선택해야 이 호출에서 돌아옴
-	intr_set_level(old_level);		// 실행을 재개한 뒤, 이 함수에서 끄기 전의 인터럽트 상태로 복원
+	ASSERT (intr_get_level () == INTR_ON);
+	enum intr_level old_level = intr_disable();
+	struct thread *curr = thread_current(); // 멈출 스레드
+	curr->wakeup_tick = timer_ticks () + ticks; // 일어날 시간을 절대 틱으로 저장
+	list_insert_ordered(&sleep_list, &curr->elem, wakeup_less, NULL); // 깨울 시각 오름차순 유지
+	thread_block();
+	intr_set_level(old_level);
 }
+
 
 /**
  * @brief 약 MS 밀리초 동안 실행을 일시 중지함.
@@ -201,21 +235,25 @@ timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
-/* 타이머 인터럽트가 발생했을 때 실행되는 처리 함수. */
 /**
  * @brief 타이머 tick 갱신하고 기한 된 대기 스레드 꺠우기
  * 
- * @details 누적 tick을 증가시킨 뒤에 thread_awake()
- * 를 호출하고, thread_tick()으로 기존 실행 시간 처리 수행
- * 
- * @note 외부 인터럽트 처리 문맥에서 실행되며 인터럽트는 꺼져 있음
- * @note 깨운 스레드는 READY 상태로 변경됨. 즉시 실행한다는 건 아니고 상태 READY
+ * @details 누적 틱을 증가시키고, sleep_list 앞에서부터 깰 시각이 된 스레드를 꺼내 깨운 뒤 thread_tick호출
+ *
+ * @note sleep_list가 wakeup_tick 오름차순이라 깰 시각이 안 된 스레드를 만나면 순회를 멈춤
  */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
-	ticks++;		// 현재 tick을 1증가 시키기
-	thread_awake(ticks);		// 기한이 된 대기 스레드를 모두 READY로 만들기
-	thread_tick ();		// 기존 실행 시간 통계와 선점 요청을 처리
+	ticks++;
+	for (struct list_elem *e = list_begin(&sleep_list); e != list_end(&sleep_list); ) {
+		struct thread *t = list_entry(e, struct thread, elem);
+		if (t->wakeup_tick <= ticks) {
+			e = list_remove(e);   // 제거하고 다음 원소 반환
+			thread_unblock(t);
+		} else
+			break;                // 정렬돼 있으므로 이후 원소는 모두 아직 깰 시각 아님
+	}
+	thread_tick ();
 }
 
 
@@ -255,7 +293,7 @@ busy_wait (int64_t loops) {
 	while (loops-- > 0)
 		barrier ();
 }
-
+ 
 /**
  * @brief 대략 NUM/DENOM초 동안 sleep함.
  *

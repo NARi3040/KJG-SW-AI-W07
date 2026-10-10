@@ -147,7 +147,7 @@ timer_sleep (int64_t ticks) {
 	thread_block();
 	intr_set_level(old_level);
 }
-
+ 
 /**
  * @brief 약 MS 밀리초 동안 실행을 일시 중지함.
  * 

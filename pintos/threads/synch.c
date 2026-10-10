@@ -39,6 +39,15 @@
 
    - up 또는 "V": 값을 1 증가시킴 (그리고 기다리는 스레드가
    있다면 하나를 깨움). */
+/**
+ * @brief 세마포어 SEMA를 VALUE로 초기화함.
+ *
+ * @param[in,out] sema 대상 리스트
+ * @param[in] value 대상 리스트
+ * @return LIST의 첫 요소. 리스트가 비어 있으면 tail
+ *
+ * @see list_end()
+ */
 void
 sema_init (struct semaphore *sema, unsigned value) {
 	ASSERT (sema != NULL);

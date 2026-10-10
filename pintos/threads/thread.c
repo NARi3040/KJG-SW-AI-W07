@@ -176,7 +176,6 @@ thread_start (void) {
  * @details
  * 스레드 통계를 추적하고, 타임 슬라이스(time slice)가 만료되면 스케줄러를 작동시킴.
  *
- * @note 아직 뭔지 모르곘음
  */
 void
 thread_tick (void) {
@@ -234,7 +233,6 @@ thread_print_stats (void) {
  * @note 실행 순서를 보장해야 한다면 세마포어나 다른 동기화 수단을 사용할 것
  * @note 제공된 코드는 새 스레드의 `priority' 멤버를 PRIORITY로 설정하기만 하고,
  *       실제 priority scheduling은 구현되어 있지 않음. Problem 1-3의 목표임
- * @note 아직 뭔지 모르곘음
  */
 tid_t
 thread_create (const char *name, int priority,
@@ -651,8 +649,7 @@ do_schedule(int status) {
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (thread_current()->status == THREAD_RUNNING);
 	while (!list_empty (&destruction_req)) {
-		struct thread *victim =
-			list_entry (list_pop_front (&destruction_req), struct thread, elem);
+		struct thread *victim = list_entry (list_pop_front (&destruction_req), struct thread, elem);
 		palloc_free_page(victim);
 	}
 	thread_current ()->status = status;

@@ -82,12 +82,27 @@ typedef int tid_t;
  * 될 수도 있음.  이 두 가지 용도로 쓸 수 있는 이유는 둘이 서로
  * 배타적이기 때문임: ready 상태의 스레드만 run queue에 있고,
  * blocked 상태의 스레드만 세마포어 대기 리스트에 있음. */
+
+
+/**
+ * @brief 커널 스레드 또는 유저 프로세스를 나타내는 구조체 (TCB)
+ *
+ * @details 
+ * 스레드마다 4 kB 페이지 하나를 차지함. 이 구조체는 페이지 맨 아래(offset 0)에,
+ * 커널 스택은 맨 위에서 아래쪽으로 자람. 그래서 구조체가 커지면 스택 공간이 줄어듦.
+ * thread_current()는 현재 rsp를 페이지 경계로 내려 이 구조체의 주소를 구함.
+ *
+ * @note elem은 ready_list(thread.c)와 세마포어 waiters(synch.c)가 공유함.
+ *       THREAD_READY와 THREAD_BLOCKED는 동시에 성립하지 않으므로 둘 중 한 리스트에만 속함.
+ * @note magic이 THREAD_MAGIC과 다르면 스택 오버플로로 보고 thread_current()에서 assertion 실패함.
+ */
 struct thread {
 	/* thread.c가 소유함. */
 	tid_t tid;                          /* 스레드 식별자. */
 	enum thread_status status;          /* 스레드 상태. */
 	char name[16];                      /* 이름 (디버깅용). */
 	int priority;                       /* 우선순위. */
+	int wakeup_tick;					/* 깨어날 틱 */
 
 	/* thread.c와 synch.c가 공유함. */
 	struct list_elem elem;              /* 리스트 요소. */
@@ -139,5 +154,12 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+
+/**
+ * @brief sleep에 들어간 쓰레드 목록
+ * 
+ * 이중 연결 리스트로 구현 되있음.
+ */
+extern struct list sleep_list;
 
 #endif /* threads/thread.h */

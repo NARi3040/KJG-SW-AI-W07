@@ -36,6 +36,13 @@
    실제로 실행 중은 아닌 프로세스들. */
 static struct list ready_list;
 
+/**
+ * @brief sleep에 들어간 쓰레드 목록
+ * 
+ * 이중 연결 리스트로 구현 되있음.
+ */
+struct list sleep_list;
+
 /* idle 스레드. */
 static struct thread *idle_thread;
 
@@ -131,6 +138,7 @@ thread_init (void) {
 	/* 전역 스레드 컨텍스트를 초기화함 */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&sleep_list);
 	list_init (&destruction_req);
 
 	/* 실행 중인 스레드를 위한 thread 구조체를 설정함. */

@@ -103,11 +103,39 @@ struct list {
 	struct list_elem tail;      /* List tail. */
 };
 
-/* Converts pointer to list element LIST_ELEM into a pointer to
-   the structure that LIST_ELEM is embedded inside.  Supply the
-   name of the outer structure STRUCT and the member name MEMBER
-   of the list element.  See the big comment at the top of the
-   file for an example. */
+/**
+ * @brief list_elem 포인터로부터 그 노드를 멤버로 가진 바깥 구조체의 포인터를 복원함.
+ *
+ * @details
+ * &LIST_ELEM->next(노드 시작 주소 + 8바이트)에서 offsetof(STRUCT, MEMBER.next)를
+ * 빼서 구조체의 시작 주소를 구함. MEMBER.next는 구조체 안에서 elem 멤버의
+ * next 필드까지의 오프셋임. 둘 다 next 기준이라 elem 기준으로 계산한 것과 결과가 같음.
+ *
+ * @verbatim
+ * struct thread (메모리)
+ * +------------------+ <- t        (우리가 원하는 주소)
+ * | tid, name, ...   |
+ * | ...              |
+ * +------------------+ <- &t->elem (= e, 리스트가 가진 주소)
+ * | elem (prev,next) |
+ * +------------------+
+ * | wakeup_tick ...  |
+ * +------------------+
+ * @endverbatim
+ *
+ * @param LIST_ELEM 구조체에 심어 둔 struct list_elem을 가리키는 포인터.
+ * @param STRUCT    바깥 구조체의 타입 이름. (예: struct thread)
+ * @param MEMBER    STRUCT 안에서 list_elem 멤버의 이름. (예: elem)
+ *
+ * @return STRUCT * 타입의 포인터.
+ *
+ * @note LIST_ELEM이 실제로 STRUCT의 MEMBER 멤버를 가리킬 때만 유효함.
+ *       다른 곳을 가리키면 잘못된 주소가 나오고 검사도 없음.
+ * @note 사용 예: list_entry (e, struct thread, elem)
+ * @note 이딴게 왜 있지
+ *
+ * @see struct list_elem
+ */
 #define list_entry(LIST_ELEM, STRUCT, MEMBER)           \
 	((STRUCT *) ((uint8_t *) &(LIST_ELEM)->next     \
 		- offsetof (STRUCT, MEMBER.next)))
@@ -128,8 +156,7 @@ struct list_elem *list_tail (struct list *);
 
 /* List insertion. */
 void list_insert (struct list_elem *, struct list_elem *);
-void list_splice (struct list_elem *before,
-		struct list_elem *first, struct list_elem *last);
+void list_splice (struct list_elem *before, struct list_elem *first, struct list_elem *last);
 void list_push_front (struct list *, struct list_elem *);
 void list_push_back (struct list *, struct list_elem *);
 
@@ -144,7 +171,7 @@ struct list_elem *list_back (struct list *);
 
 /* List properties. */
 size_t list_size (struct list *);
-bool list_empty (struct list *);
+bool list_empty (struct list *); // ?
 
 /* Miscellaneous. */
 void list_reverse (struct list *);

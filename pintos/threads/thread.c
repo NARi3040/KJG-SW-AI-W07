@@ -75,9 +75,6 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
-static void sleep_list_insert (struct thread *t);
-static bool wakeup_tick_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-
 
 /* T가 유효한 스레드를 가리키는 것으로 보이면 true를 반환함. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -292,29 +289,11 @@ thread_create (const char *name, int priority,
  * @see thread_unblock()
  * @see schedule()
  */
-void thread_block (void) {		// ASSERT: 조건검사 - 이 조검이 참어어야 하며, 아니라면 오류를 알리고 실행을 중단
-	ASSERT (!intr_context ());		// 외부 인터럽트 핸들러 안에서 호출한 것이 아닌지 검사
-	ASSERT (intr_get_level () == INTR_OFF);		// 인터럽트가 꺼져있는지 검사
-	thread_current ()->status = THREAD_BLOCKED;		// 현재 스레드 상태를 BLOCKED로 변경
-	schedule ();		// 다음 실행 대상을 선택하고 실행을 넘김
-}
-
-void thread_awake(int64_t now_tick) {
-	ASSERT(intr_get_level() == INTR_OFF);
-
-	while (!list_empty(&sleep_list))		// 빈 목록이면 아무 작업도 하지 않음
-	{
-		struct list_elem *e = list_front(&sleep_list);
-		struct thread *t = list_entry(e, struct thread, elem);
-		/*기한 확인 > 필요하면 반복 종료 > 제거 > 깨우기*/
-		int64_t thread_date = t->wakeup_tick;
-		if (thread_date > now_tick)
-		{
-			break;		// sleep_list 맨 앞 스레드의 기한이 아직 미래라면 반복 종료
-		}
-		list_pop_front(&sleep_list);		// 기한이 됐으면 sleep_list에서 제거
-		thread_unblock(t);		// READY 상태로 전환
-	}
+void thread_block (void) {
+	ASSERT (!intr_context ());
+	ASSERT (intr_get_level () == INTR_OFF);
+	thread_current ()->status = THREAD_BLOCKED;
+	schedule ();
 }
 
 /**

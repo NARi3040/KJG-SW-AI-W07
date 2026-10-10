@@ -13,7 +13,7 @@
 #include "threads/io.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
- 
+
 /* 8254 타이머 칩의 하드웨어 세부 사항은 [8254] 참고. */
 
 #if TIMER_FREQ < 19
@@ -26,9 +26,6 @@
 /* OS 부팅 이후 지난 타이머 틱 수. */
 static int64_t ticks;
 
-/* 잠든 스레드들을 관리하는 목록. */
-static struct list sleep_list;
-
 /* 타이머 틱 하나당 루프 횟수.
    timer_calibrate()가 초기화함. */
 static unsigned loops_per_tick;
@@ -38,35 +35,6 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
-/**
- * @brief 두 스레드의 깨울 시각을 비교한다.
- *
- * @details
- * a와 b가 가리키는 sleep_elem에서 각각의 스레드를 찾고,
- * wakeup_tick을 비교한다. 잠든 스레드 목록을 깨울 시각의
- * 오름차순으로 유지하기 위한 비교 함수다.
- *
- * @param[in] a 첫 번째 스레드의 sleep_elem을 가리키는 포인터
- * @param[in] b 두 번째 스레드의 sleep_elem을 가리키는 포인터
- * @param[in] aux 추가 비교 정보. 이 함수에서는 사용하지 않는다.
- *
- * @retval true a의 깨울 시각이 b보다 이르다.
- * @retval false a의 깨울 시각이 b와 같거나 더 늦다.
- *
- * @see list_insert_ordered()
- */
-static bool
-wakeup_less (const struct list_elem *a,
-             const struct list_elem *b,
-             void *aux UNUSED) {
-    const struct thread *ta =
-        list_entry (a, struct thread, sleep_elem);
-    const struct thread *tb =
-        list_entry (b, struct thread, sleep_elem);
-
-    return ta->wakeup_tick < tb->wakeup_tick;
-}
- 
 /**
  * @brief 8254 PIT(Programmable Interval Timer)가 초당 PIT_FREQ번 인터럽트를 발생시키도록 설정하고, 해당 인터럽트를 등록함
  * 
@@ -78,9 +46,6 @@ timer_init (void) {
 	/* 8254 입력 주파수를 TIMER_FREQ로 나눈 값.
 	   가장 가까운 정수로 반올림. */
 	uint16_t count = (1193180 + TIMER_FREQ / 2) / TIMER_FREQ;
-
-	/* 목록 초기화 */
-	list_init (&sleep_list);
 
 	outb (0x43, 0x34);    /* CW: 카운터 0, LSB 다음 MSB, 모드 2, 바이너리. */
 	outb (0x40, count & 0xff);
@@ -162,8 +127,8 @@ wakeup_less (const struct list_elem *a, const struct list_elem *b, void *aux UNU
 }
 
 /**
- * @brief 요청한 tick 수가 지날 때까지 현재 스레드를 재운다.
- *
+ * @brief 요청한 tick 수가 지날 때까지 다음 작업 지연시키기
+ * 
  * @details
  * 인터럽트를 끈 상태에서 현재 스레드의 깨울 시각(절대 틱)을 계산해 wakeup_tick에 저장하고
  * sleep_list에 오름차순으로 끼워 넣은 뒤 BLOCKED 상태로 잠든다.
@@ -182,7 +147,6 @@ timer_sleep (int64_t ticks) {
 	thread_block();
 	intr_set_level(old_level);
 }
-
 
 /**
  * @brief 약 MS 밀리초 동안 실행을 일시 중지함.
@@ -235,8 +199,9 @@ timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
 
+/* 타이머 인터럽트가 발생했을 때 실행되는 처리 함수. */
 /**
- * @brief 타이머 tick 갱신하고 기한 된 대기 스레드 꺠우기
+ * @brief 타이머 인터럽트가 발생했을 때 실행되는 핸들러
  * 
  * @details 누적 틱을 증가시키고, sleep_list 앞에서부터 깰 시각이 된 스레드를 꺼내 깨운 뒤 thread_tick호출
  *

@@ -13,7 +13,7 @@
 #include "threads/io.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-
+ 
 /* 8254 타이머 칩의 하드웨어 세부 사항은 [8254] 참고. */
 
 #if TIMER_FREQ < 19
@@ -236,7 +236,7 @@ timer_print_stats (void) {
 }
 
 /**
- * @brief 타이머 인터럽트가 발생했을 때 실행되는 핸들러
+ * @brief 타이머 tick 갱신하고 기한 된 대기 스레드 꺠우기
  * 
  * @details 누적 틱을 증가시키고, sleep_list 앞에서부터 깰 시각이 된 스레드를 꺼내 깨운 뒤 thread_tick호출
  *
